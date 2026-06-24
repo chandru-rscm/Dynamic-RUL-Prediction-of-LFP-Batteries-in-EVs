@@ -1,0 +1,24 @@
+# Environments
+.venv/
+env/
+__pycache__/
+*.pyc
+
+# IDEs
+.vscode/
+.idea/
+
+# Large Datasets & Processed Files
+data/raw/*.csv
+data/raw/*.parquet
+data/processed/*.csv
+data/processed/*.parquet
+data/test_samples/*.csv
+
+# Trained Models (Too large for GitHub, generated locally)
+src/models/*.pkl
+*.joblib
+
+# OS Files
+.DS_Store
+Thumbs.db
