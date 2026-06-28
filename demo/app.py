@@ -86,6 +86,14 @@ with tab1:
         col3.metric("90% Confidence Interval", f"[{int(lower_bound)}, {int(upper_bound)}]")
         col4.metric("True RUL at this point", f"{int(current_row['RUL'].iloc[0])} cycles")
 
+        from sklearn.metrics import mean_absolute_error, mean_absolute_percentage_error, r2_score
+        all_true_t1 = cell_data['RUL']
+        all_preds_t1 = model.predict(cell_data[features])
+        mae_t1 = mean_absolute_error(all_true_t1, all_preds_t1)
+        mape_t1 = mean_absolute_percentage_error(np.clip(all_true_t1, 1, None), np.maximum(0, all_preds_t1))
+        r2_t1 = r2_score(all_true_t1, all_preds_t1)
+        st.info(f"**Overall Trajectory Metrics on this cell:** MAE = {mae_t1:.1f} cycles | MAPE = {mape_t1*100:.1f}% | **R² Accuracy Score = {r2_t1*100:.1f}%**")
+
         # Plotting
         fig = go.Figure()
 
@@ -177,10 +185,11 @@ with tab2:
                     # Calculate errors over the entire trajectory
                     all_true = custom_df['RUL']
                     all_preds_full = model.predict(custom_df[features])
-                    from sklearn.metrics import mean_absolute_error, mean_absolute_percentage_error
+                    from sklearn.metrics import mean_absolute_error, mean_absolute_percentage_error, r2_score
                     mae = mean_absolute_error(all_true, all_preds_full)
                     mape = mean_absolute_percentage_error(np.clip(all_true, 1, None), np.maximum(0, all_preds_full))
-                    st.info(f"**Overall Trajectory Error on this battery:** MAE = {mae:.1f} cycles | MAPE = {mape*100:.1f}%")
+                    r2 = r2_score(all_true, all_preds_full)
+                    st.info(f"**Overall Trajectory Metrics on this battery:** MAE = {mae:.1f} cycles | MAPE = {mape*100:.1f}% | **R² Accuracy Score = {r2*100:.1f}%**")
 
                 # Plotting
                 fig2 = go.Figure()
