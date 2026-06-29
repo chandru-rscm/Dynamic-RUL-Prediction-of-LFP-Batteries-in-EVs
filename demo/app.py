@@ -299,6 +299,12 @@ with tab3:
         c_c3.metric("System Zero (sz)", f"{curr_zero:.4f} rad/s")
         c_c4.metric("Time Constant (τ)", f"{curr_tau:.2f} s")
 
+        # Dynamic Live Transfer Function Display
+        curr_r0 = r0[idx_t3]
+        curr_r1 = r1[idx_t3]
+        st.markdown("#### 📐 Live Numerical Laplace Transfer Function at this Cycle:")
+        st.latex(r"H(s) = " + f"{curr_r0:.4f} + \\frac{{{curr_r1:.4f}}}{{1 + {curr_tau:.2f} s}} = {curr_r0:.4f} \\cdot \\frac{{s - ({curr_zero:.4f})}}{{s - ({curr_pole:.4f})}}")
+
         # Plot Pole Migration in Complex s-plane
         fig_pz = go.Figure()
 
