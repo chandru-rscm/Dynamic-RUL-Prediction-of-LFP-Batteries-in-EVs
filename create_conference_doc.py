@@ -370,7 +370,7 @@ def create_document():
     ip3.add_run("Empowering recycling and grid-storage facilities to rapidly evaluate used EV batteries via brief pulse impedance testing, sorting viable cells for solar grid energy storage.")
 
     # Save doc
-    output_path = "Dynamic_RUL_Prediction_Conference_Documentation.docx"
+    output_path = "Dynamic_RUL_Prediction_Conference_Paper_Draft.docx"
     doc.save(output_path)
     print(f"Document saved successfully as '{output_path}'.")
 
