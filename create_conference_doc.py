@@ -338,6 +338,10 @@ def create_document():
 
     add_heading_2("10.3 Current Limitations & Future Scope")
     p = doc.add_paragraph(style='List Bullet')
+    p.add_run("Lifespan Horizon Calibration (1,000–1,200 Cycles): ").font.bold = True
+    p.add_run("The Stanford/MIT dataset batteries underwent continuous multistep fast-charging profiles (1C to 6C rates), causing them to reach their 80% SOH end-of-life retirement horizon in approximately 1,000 to 1,200 cycles. This calibration perfectly matches high-strain commercial Indian EV fleets and fast-charged passenger EVs. However, ultra-gentle 'eco-mode' charging profiles (e.g., Tesla home slow charging at 0.2C) can extend LFP lifespans up to 3,000–3,500 cycles. When evaluating external synthetic datasets exceeding 2,000+ cycles, the current regression weights exhibit out-of-distribution deviation. Future research will incorporate multi-horizon transfer learning across gentle and aggressive charging cohorts.")
+
+    p = doc.add_paragraph(style='List Bullet')
     p.add_run("Extreme Thermal Shock: ").font.bold = True
     p.add_run("The model does not currently isolate instantaneous sub-zero thermal shocks (<-20°C), which temporarily spike electrolyte resistance without causing permanent active material loss.")
 
