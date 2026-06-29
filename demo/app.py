@@ -315,6 +315,8 @@ with tab3:
         xaxis_title="Real Axis σ (rad/s) [Stability Degradation Trajectory ➔]",
         yaxis_title="Imaginary Axis jω",
         yaxis=dict(range=[-0.5, 0.5]),
+        legend=dict(orientation="h", yanchor="bottom", y=1.05, xanchor="right", x=1),
+        margin=dict(t=80),
         template="plotly_white"
     )
 
