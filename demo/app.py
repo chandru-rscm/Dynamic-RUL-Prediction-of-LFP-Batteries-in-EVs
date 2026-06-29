@@ -247,78 +247,99 @@ with tab3:
 
     st.info("💡 **Why this predicts the Capacity Plunge before RUL:** As the battery degrades, internal resistance increases and active bulk capacitance decreases. This causes the system pole $p_1$ to migrate across the complex frequency plane. Monitoring this pole trajectory detects the stability threshold ('capacity knee') before exponential failure occurs!")
 
-    # Select battery for Pole-Zero Simulation
-    cell_ids_t3 = test_df['cell_id'].unique()
-    selected_cell_t3 = st.selectbox("Select test cell to track Electrochemical Pole Migration:", cell_ids_t3, key="ctrl_cell")
-    cell_data_t3 = test_df[test_df['cell_id'] == selected_cell_t3].sort_values('cycle')
+    # Select Data Source for Pole-Zero Simulation
+    data_source_t3 = st.radio("Select Data Source for Control Analysis:", ["🧪 Unseen Test Cell", "📁 Upload Custom CSV"], horizontal=True, key="ctrl_src")
 
-    # Calculate simulated Poles and Zeros across cycles
-    # R0 = IR, R1 = IR * 1.2 (polarization growth), C1 = SOH * 300 (capacitance decay)
-    r0 = cell_data_t3['IR'].values
-    r1 = r0 * (1.2 + (1.0 - cell_data_t3['SOH'].values) * 2.0)
-    c1 = np.maximum(10.0, cell_data_t3['SOH'].values * 400.0)
-    tau = r1 * c1
+    cell_data_t3 = None
+    cell_label_t3 = ""
 
-    poles = -1.0 / tau
-    zeros = -(r0 + r1) / (r0 * r1 * c1)
-    cycles_t3 = cell_data_t3['cycle'].values
-    soh_t3 = cell_data_t3['SOH'].values
+    if data_source_t3 == "🧪 Unseen Test Cell":
+        cell_ids_t3 = test_df['cell_id'].unique()
+        selected_cell_t3 = st.selectbox("Select test cell to track Electrochemical Pole Migration:", cell_ids_t3, key="ctrl_cell")
+        cell_data_t3 = test_df[test_df['cell_id'] == selected_cell_t3].sort_values('cycle')
+        cell_label_t3 = selected_cell_t3
+    else:
+        up_file_t3 = st.file_uploader("Upload CSV file for Pole-Zero migration analysis", type=["csv"], key="ctrl_up")
+        if up_file_t3 is not None:
+            custom_df_t3 = pd.read_csv(up_file_t3)
+            req_cols = ['cycle', 'SOH', 'IR']
+            if not all(col in custom_df_t3.columns for col in req_cols):
+                st.error(f"Missing required columns! Ensure your CSV has at least: {req_cols}")
+            else:
+                cell_data_t3 = custom_df_t3.sort_values('cycle')
+                cell_label_t3 = up_file_t3.name
+        else:
+            st.info("👆 Please upload a CSV file (e.g. `Synthetic_Unseen_High_Temp.csv`) to track its Electrochemical Pole Migration.")
 
-    # Interactive slider for current cycle checkpoint
-    max_cyc_t3 = int(cycles_t3.max())
-    sim_cyc_t3 = st.slider("Select Checkpoint Cycle for Pole-Zero Inspection:", min_value=int(cycles_t3.min()), max_value=max_cyc_t3, step=5, key="ctrl_slider")
+    if cell_data_t3 is not None and len(cell_data_t3) > 0:
+        # Calculate simulated Poles and Zeros across cycles
+        # R0 = IR, R1 = IR * 1.2 (polarization growth), C1 = SOH * 300 (capacitance decay)
+        r0 = cell_data_t3['IR'].values
+        r1 = r0 * (1.2 + (1.0 - cell_data_t3['SOH'].values) * 2.0)
+        c1 = np.maximum(10.0, cell_data_t3['SOH'].values * 400.0)
+        tau = r1 * c1
 
-    idx_t3 = np.abs(cycles_t3 - sim_cyc_t3).argmin()
-    curr_pole = poles[idx_t3]
-    curr_zero = zeros[idx_t3]
-    curr_tau = tau[idx_t3]
+        poles = -1.0 / tau
+        zeros = -(r0 + r1) / (r0 * r1 * c1)
+        cycles_t3 = cell_data_t3['cycle'].values
+        soh_t3 = cell_data_t3['SOH'].values
 
-    c_c1, c_c2, c_c3, c_c4 = st.columns(4)
-    c_c1.metric("Current Cycle", f"{cycles_t3[idx_t3]}")
-    c_c2.metric("System Pole (sp)", f"{curr_pole:.4f} rad/s")
-    c_c3.metric("System Zero (sz)", f"{curr_zero:.4f} rad/s")
-    c_c4.metric("Time Constant (τ)", f"{curr_tau:.2f} s")
+        # Interactive slider for current cycle checkpoint
+        max_cyc_t3 = int(cycles_t3.max())
+        sim_cyc_t3 = st.slider("Select Checkpoint Cycle for Pole-Zero Inspection:", min_value=int(cycles_t3.min()), max_value=max_cyc_t3, step=5, key="ctrl_slider")
 
-    # Plot Pole Migration in Complex s-plane
-    fig_pz = go.Figure()
+        idx_t3 = np.abs(cycles_t3 - sim_cyc_t3).argmin()
+        curr_pole = poles[idx_t3]
+        curr_zero = zeros[idx_t3]
+        curr_tau = tau[idx_t3]
 
-    # Full trajectory trail
-    fig_pz.add_trace(go.Scatter(
-        x=poles,
-        y=np.zeros_like(poles),
-        mode='lines+markers',
-        name='Pole Migration Path (Lifecycle)',
-        marker=dict(size=6, color=cycles_t3, colorscale='Viridis', showscale=True, colorbar=dict(title="Cycle")),
-        line=dict(color='gray', dash='dot')
-    ))
+        c_c1, c_c2, c_c3, c_c4 = st.columns(4)
+        c_c1.metric("Current Cycle", f"{cycles_t3[idx_t3]}")
+        c_c2.metric("System Pole (sp)", f"{curr_pole:.4f} rad/s")
+        c_c3.metric("System Zero (sz)", f"{curr_zero:.4f} rad/s")
+        c_c4.metric("Time Constant (τ)", f"{curr_tau:.2f} s")
 
-    # Current checkpoint marker
-    fig_pz.add_trace(go.Scatter(
-        x=[curr_pole],
-        y=[0],
-        mode='markers',
-        name=f'Current Pole (Cycle {cycles_t3[idx_t3]})',
-        marker=dict(size=16, color='red', symbol='x')
-    ))
+        # Plot Pole Migration in Complex s-plane
+        fig_pz = go.Figure()
 
-    # Zero position marker
-    fig_pz.add_trace(go.Scatter(
-        x=[curr_zero],
-        y=[0],
-        mode='markers',
-        name=f'Current Zero (Cycle {cycles_t3[idx_t3]})',
-        marker=dict(size=14, color='blue', symbol='circle-open', line=dict(width=3))
-    ))
+        # Full trajectory trail
+        fig_pz.add_trace(go.Scatter(
+            x=poles,
+            y=np.zeros_like(poles),
+            mode='lines+markers',
+            name='Pole Migration Path (Lifecycle)',
+            marker=dict(size=6, color=cycles_t3, colorscale='Viridis', showscale=True, colorbar=dict(title="Cycle")),
+            line=dict(color='gray', dash='dot')
+        ))
 
-    fig_pz.update_layout(
-        title=f"Complex s-Plane Pole-Zero Migration Map ({selected_cell_t3})",
-        xaxis_title="Real Axis σ (rad/s) [Stability Degradation Trajectory ➔]",
-        yaxis_title="Imaginary Axis jω",
-        yaxis=dict(range=[-0.5, 0.5]),
-        legend=dict(orientation="h", yanchor="bottom", y=1.05, xanchor="right", x=1),
-        margin=dict(t=80),
-        template="plotly_white"
-    )
+        # Current checkpoint marker
+        fig_pz.add_trace(go.Scatter(
+            x=[curr_pole],
+            y=[0],
+            mode='markers',
+            name=f'Current Pole (Cycle {cycles_t3[idx_t3]})',
+            marker=dict(size=16, color='red', symbol='x')
+        ))
 
-    st.plotly_chart(fig_pz, use_container_width=True)
+        # Zero position marker
+        fig_pz.add_trace(go.Scatter(
+            x=[curr_zero],
+            y=[0],
+            mode='markers',
+            name=f'Current Zero (Cycle {cycles_t3[idx_t3]})',
+            marker=dict(size=14, color='blue', symbol='circle-open', line=dict(width=3))
+        ))
+
+        fig_pz.update_layout(
+            title=f"Complex s-Plane Pole-Zero Migration Map ({cell_label_t3})",
+            xaxis_title="Real Axis σ (rad/s) [Stability Degradation Trajectory ➔]",
+            yaxis_title="Imaginary Axis jω",
+            yaxis=dict(range=[-0.5, 0.5]),
+            legend=dict(orientation="h", yanchor="bottom", y=1.05, xanchor="right", x=1),
+            margin=dict(t=80),
+            template="plotly_white"
+        )
+
+        st.plotly_chart(fig_pz, use_container_width=True)
+
 
