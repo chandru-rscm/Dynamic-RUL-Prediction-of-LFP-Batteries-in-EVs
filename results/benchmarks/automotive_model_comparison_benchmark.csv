@@ -1,0 +1,5 @@
+Model,MAE (Cycles),R2 Score (%),Model Size (KB),Desktop Workstation Latency (ms),ARM Cortex MCU Total Loop Latency (ms),Hardware Automotive ECU Feasibility
+Linear Regression (Severson Baseline),152.9046568,56.1183504,1.563476563,0.000310581,0.2202,DEPLOYABLE (But Catastrophic Error > 150 cycles)
+Random Forest Regressor,80.18186453,79.15239397,28138.93848,0.006694072,2.39,FAILED: Out of Flash Memory (28.1 MB exceeds 1 MB MCU limit)
+XGBoost Regressor,82.52513863,80.25386156,1364.514648,0.001129594,1.22,BORDERLINE: Exceeds standard 1 MB Flash limit (1.36 MB)
+Our LightGBM Framework,79.9101822,81.61537104,809.1074219,0.001681719,0.95,"OPTIMAL: Fits in 809 KB Flash, 0.95 ms Full Loop (< 1.5 ms limit)"

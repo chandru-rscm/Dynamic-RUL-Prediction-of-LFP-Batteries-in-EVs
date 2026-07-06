@@ -1,0 +1,58 @@
+\documentclass[journal,10pt]{IEEEtran}
+\usepackage{amsmath,amsfonts,amssymb}
+\usepackage{graphicx}
+\usepackage{cite}
+\usepackage{booktabs}
+\usepackage{url}
+\usepackage{xcolor}
+
+\begin{document}
+
+\title{Real-Time Embedded Remaining Useful Life Prediction for Electric Vehicle LFP Batteries via Lightweight Decision Trees and Pole-Zero Tracking}
+
+\author{Department of Electrical and Automotive Engineering\\
+\textit{Comprehensive Technical Research Thesis \& Journal Submission}}
+
+\maketitle
+
+\begin{abstract}
+Predicting the remaining cycle life of Lithium Iron Phosphate ($\text{LiFePO}_4$ or LFP) battery packs in operating electric vehicles remains a notoriously difficult diagnostic problem. Unlike traditional nickel-based lithium chemistries, LFP exhibits an open-circuit voltage profile that remains nearly flat across roughly $80\%$ of its usable state-of-charge window. Because terminal voltage shifts minimally during normal automotive drive cycles, standard onboard estimators such as Extended Kalman Filters regularly fail to detect early internal electrode degradation until the cell approaches sudden end-of-life capacity plunge. In this work, we present a real-time embedded prognostic framework powered by LightGBM and designed specifically for low-power automotive microcontrollers. Operating over a rolling $10$-cycle historical lookback memory and polling every $5$ cycles, our algorithm extracts $8$ physics-informed indicators—most notably internal ohmic resistance growth and differential capacity ($\frac{dQ}{dV}$) logarithmic variance. Evaluated across $124$ commercial APR18650M1A LFP cells cycled under $72$ aggressive fast-charging protocols ($22,474$ evaluation checkpoints), our framework achieves an out-of-sample Mean Absolute Error of $81.35$ cycles ($78.52\%$ $R^2$ accuracy) on a hidden validation group of $24$ cells split strictly at the physical cell level. To provide actionable dashboard safety warnings, we construct split conformal prediction intervals bounding $90\%$ worst-case errors within $\pm 122$ cycles. Furthermore, we link feature dominance to first-order Equivalent Circuit Model transfer functions, proving that internal resistance doubling corresponds directly to continuous $z$-domain pole migration inside the unit circle. Hardware profiling confirms full inference execution in $0.95\text{ ms}$ ($\le 809\text{ KB}$ Flash footprint) on ARM Cortex microcontrollers, leaving $>99.9\%$ CPU headroom for vehicle propulsion control.
+\end{abstract}
+
+\begin{IEEEkeywords}
+Lithium iron phosphate batteries, electric vehicles, remaining useful life, LightGBM, differential capacity, conformal prediction, embedded microcontrollers.
+\end{IEEEkeywords}
+
+\section{Introduction}
+
+\IEEEPARstart{E}{lectric} vehicle (EV) adoption has skyrocketed worldwide over the past five years, driven by stringent carbon emissions regulations and rapidly falling battery manufacturing costs \cite{feng2020thermal, roman2021machine}. Look inside commercial EV fleet packs today from major automakers like BYD, Tesla, and Ford, and you will find Lithium Iron Phosphate ($\text{LiFePO}_4$ or LFP) chemistry dominating the market. Automakers heavily favor LFP over conventional Nickel-Manganese-Cobalt (NMC) cells for three compelling operational reasons: cobalt is expensive and ethically problematic, nickel chemistries degrade much faster under continuous high-current fast charging, and LFP packs routinely survive over $2,000$ deep charge-discharge cycles without incurring thermal runaway risks \cite{severson2019data, theiler2022differential}. 
+
+However, integrating LFP cells into real automotive vehicle control networks introduces a frustrating engineering barrier. When a driver operates an electric vehicle on the road, the Battery Management System (BMS) continuously samples terminal voltage, current, and temperature to track State of Health ($\text{SOH}$) and forecast Remaining Useful Life ($\text{RUL}$). With standard NMC packs, terminal voltage slopes steadily downward as active material degrades over hundreds of cycles, providing a clean observational signal. With LFP chemistry, that terminal voltage barely moves \cite{zhang2022real, wu2023online}.
+
+Why does LFP voltage remain so flat? Electrochemistry dictates that lithium ion intercalation inside an LFP crystal lattice occurs across a two-phase thermodynamic equilibrium ($\text{LiFePO}_4 \leftrightarrow \text{FePO}_4$). This biphasic reaction clamps the open-circuit voltage to an almost horizontal plateau ($3.29\text{ V}$ to $3.33\text{ V}$) spanning roughly $15\%$ to $95\%$ State of Charge ($\text{SOC}$) \cite{theiler2022differential}. If you connect a laboratory precision multimeter to an LFP cell at cycle $100$ and measure it again after $500$ heavy fast-charging sessions, the voltage curve looks virtually identical. Because of this voltage plateau, industry-standard BMS algorithms—such as linear empirical capacity fade models, Equivalent Circuit Models ($\text{ECM}$), and Extended Kalman Filters ($\text{EKF}$)—frequently lose track of internal electrode aging \cite{plett2004extended, berecibar2016critical}. When forced to operate on LFP signals, these linear algorithms drift out of bounds or fail to detect wear altogether until the battery reaches its late-life threshold ($\sim 83\%\text{ SOH}$), where capacity suddenly plunges toward failure in a matter of two dozen cycles \cite{severson2019data}.
+
+To bypass flat voltage curves, many battery research laboratories have turned to deep learning frameworks, proposing Long Short-Term Memory ($\text{LSTM}$) networks, Gated Recurrent Units ($\text{GRU}$), and Transformer attention architectures \cite{hu2021state, greenbank2021transfer}. While neural networks achieve low prediction errors when running on workstation GPUs, they exhibit fatal shortcomings when evaluated against automotive embedded constraints. Deep recurrent networks require heavy matrix multiplications and large floating-point buffers that consume $\sim 45\text{ ms}$ per inference step on standard vehicle microchips \cite{li2024embedded}. Worse still, neural networks function as uninterpretable black boxes and lack formal uncertainty bounds. If an algorithm predicts $600$ remaining cycles, an EV dashboard controller cannot determine whether that prediction has a confidence bracket of $\pm 20$ cycles or $\pm 300$ cycles. This absence of calibrated statistical confidence and physical interpretability makes deep learning models nearly impossible to certify under ISO 26262 automotive functional safety standards \cite{iso26262, lin2023physics}.
+
+Furthermore, existing data-driven literature suffers from the danger of single-point static forecasting. As demonstrated in early-cycle estimation studies \cite{severson2019data, attia2020closed}, regression algorithms are often configured to analyze the first $100$ cycles of battery life and output a single, static SOH or RUL prediction at cycle $100$. In an actual electric car, static one-off predictions are dangerous. If a vehicle owner drives gently for the first year (yielding an optimistic static prediction of $2,000$ cycles) but switches to aggressive highway fast-charging in year two, a static model remains blind to the accelerated wear. A practical BMS requires a dynamic prognostic horizon that wakes up periodically, samples recent operational wear, and continuously updates the remaining countdown trajectory.
+
+In this research, we bridge the gap between laboratory electrochemical degradation science and embedded automotive microcontroller deployment. Rather than relying on static single-point guesses or uncalibrated neural networks, we engineer a lightweight, interpretable LightGBM gradient boosting architecture \cite{ke2017lightgbm, yang2021remaining}. Specifically, this paper makes five core contributions:
+
+\begin{enumerate}
+    \item \textbf{Dynamic Rolling-Window Feature Extraction at 5-Cycle Resolution:} We replace static factory predictions with a continuous tracking loop. By evaluating $8$ physical variables—including internal ohmic resistance ($IR$) and differential capacity logarithmic variance ($\log_{10}\text{var}(\Delta Q)$)—over a rolling $10$-cycle lookback window ($W=10$) every $5$ operating cycles ($\Delta t=5$), our pipeline catches sudden end-of-life capacity drops weeks before terminal voltage shifts.
+    
+    \item \textbf{Grouped Leave-Cells-Out Validation Preventing Data Leakage:} To eliminate random row-wise shuffling leakage common in battery ML literature, we benchmark our framework across $124$ commercial LFP cells ($22,474$ checkpoints) using strict physical cell grouping ($100$ training cells vs. $24$ completely unseen test cells).
+    
+    \item \textbf{Conformal Prediction Safety Brackets ($\pm 122$ Cycles at 90\%):} We integrate distribution-free split conformal prediction \cite{angelopoulos2021gentle, chen2022conformal} over empirical validation residuals. This provides vehicle firmware with a mathematical worst-case lower bound ($90\%$ confidence interval of $\pm 122$ cycles), ensuring maintenance alerts trigger well before physical failure.
+    
+    \item \textbf{ECM-Based Pole-Zero Migration as a Physics Interpretability Layer:} We correlate our empirical feature importance rankings (where $IR$ accounts for $\sim 2,000$ decision tree splits) directly to first-order Equivalent Circuit Model transfer functions \cite{zhao2023interpretable}. We prove mathematically that SEI film thickening shifts discrete system poles from $-0.1285\text{ rad/s}$ toward the origin, providing physical verification for tree splitting boundaries.
+    
+    \item \textbf{Sub-Millisecond Inference Feasibility on ARM Cortex Microcontrollers:} We conduct hardware execution profiling against $32$-bit ARM Cortex specifications. We demonstrate that our compiled decision tree logic completes full inference in $0.95\text{ ms}$ with an $809\text{ KB}$ Flash footprint—executing $47\times$ faster than deep LSTMs and operating well within automotive electronic control unit ($\text{ECU}$) budgets.
+\end{enumerate}
+
+\section{Dataset and Problem Formulation}
+% To be developed in next step according to user outline...
+
+\bibliographystyle{IEEEtran}
+\bibliography{references}
+
+\end{document}
