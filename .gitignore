@@ -30,3 +30,4 @@ reports/
 *.zip
 cropped_figures_sequential/
 proof_interval_*.png
+ppt, docs, figures/
