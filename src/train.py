@@ -16,15 +16,11 @@ def train_dynamic_model():
         
     df = pd.read_parquet(in_path)
     
-    # Features
     features = ['cycle', 'SOH', 'capacity_fade_window', 'IR', 'Tavg', 'dQ_log_var', 'dQ_min', 'dQ_mean']
     target = 'RUL'
     
-    # Drop any NaNs
     df = df.dropna(subset=features + [target])
     
-    # Instead of harsh batch splitting, we use a global 80/20 split grouped by cell 
-    # to ensure the same cell isn't in both train and test (LOCO approximation)
     from sklearn.model_selection import GroupShuffleSplit
     gss = GroupShuffleSplit(n_splits=1, test_size=0.2, random_state=42)
     train_idx, test_idx = next(gss.split(df, groups=df['cell_id']))
@@ -40,7 +36,6 @@ def train_dynamic_model():
     
     print(f"Training on {len(X_train)} checkpoints, Testing on {len(X_test)} checkpoints.")
     
-    # Model
     model = lgb.LGBMRegressor(
         n_estimators=300,
         learning_rate=0.05,
@@ -49,14 +44,10 @@ def train_dynamic_model():
         random_state=42
     )
     
-    # Suppress verbose output
     model.fit(X_train, y_train)
     
-    # Predict
     preds = model.predict(X_test)
     
-    # Metrics
-    # Clip RUL target to at least 1 for stable MAPE calculation
     y_test_safe = np.clip(y_test, 1, None)
     preds_safe = np.clip(preds, 0, None)
     
@@ -69,13 +60,11 @@ def train_dynamic_model():
     print(f"Test MAE: {mae:.2f} cycles")
     print(f"Test MAPE: {mape*100:.2f}%\n")
     
-    # Save model
     os.makedirs(MODEL_DIR, exist_ok=True)
     model_path = os.path.join(MODEL_DIR, "lightgbm_rul.pkl")
     joblib.dump(model, model_path)
     print(f"Model saved to {model_path}")
     
-    # Feature Importance
     importance = model.feature_importances_
     print("--- Feature Importance ---")
     for f, imp in zip(features, importance):

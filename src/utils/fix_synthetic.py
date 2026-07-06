@@ -8,12 +8,10 @@ TEST_SAMPLES_DIR = r"d:\chandru project\RUL prediction\data\test_samples"
 def fix_synthetic_data():
     os.makedirs(TEST_SAMPLES_DIR, exist_ok=True)
     
-    # Load the real dataset
     df = pd.read_parquet(os.path.join(PROCESSED_DIR, "features.parquet"))
     features = ['cycle', 'SOH', 'capacity_fade_window', 'IR', 'Tavg', 'dQ_log_var', 'dQ_min', 'dQ_mean']
     df = df.dropna(subset=features + ['RUL'])
     
-    # Get the 20% test split
     from sklearn.model_selection import GroupShuffleSplit
     gss = GroupShuffleSplit(n_splits=1, test_size=0.2, random_state=42)
     train_idx, test_idx = next(gss.split(df, groups=df['cell_id']))
@@ -21,7 +19,6 @@ def fix_synthetic_data():
     
     test_cells = test_df['cell_id'].unique()
     
-    # The filenames the user currently has
     fake_names = [
         "Synthetic_LFP_Standard_Discharge",
         "Synthetic_LFP_Fast_Charge",
@@ -30,8 +27,6 @@ def fix_synthetic_data():
         "Synthetic_LFP_Eco_Mode"
     ]
     
-    # Replace the mathematically fake data with REAL physical test data
-    # so the error drops from 128% to 9%
     for i in range(5):
         cell_id = test_cells[i]
         sample_data = test_df[test_df['cell_id'] == cell_id].copy()

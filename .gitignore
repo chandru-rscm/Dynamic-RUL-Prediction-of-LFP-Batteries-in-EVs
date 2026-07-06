@@ -21,5 +21,12 @@ src/models/*.pkl
 
 # OS Files
 .DS_Store
-Thumbs.db
-*.mat  
+*.mat
+
+# Documents, Presentations, and Reports
+reports/
+*.docx
+*.pptx
+*.zip
+cropped_figures_sequential/
+proof_interval_*.png

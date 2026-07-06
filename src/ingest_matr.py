@@ -17,7 +17,6 @@ def load_matr_batch(filepath, batch_name):
         
     batch = f['batch']
     num_cells = batch['summary'].shape[0]
-    
     rows = []
     
     for i in range(num_cells):
@@ -30,16 +29,12 @@ def load_matr_batch(filepath, batch_name):
             summary = f[summary_ref]
             cycles = f[cycles_ref]
             
-            # Read policy
             policy = f[policy_ref]
             policy_str = "".join([chr(c[0]) for c in policy])
             
-            # Read cycle life
             cycle_life = f[cycle_life_ref][0, 0]
-            
             cell_id = f"{batch_name}_cell_{i}"
             
-            # Read summary arrays
             IR = summary['IR'][0, :]
             QC = summary['QCharge'][0, :]
             QD = summary['QDischarge'][0, :]
@@ -48,7 +43,6 @@ def load_matr_batch(filepath, batch_name):
             num_cycles = cycles['I'].shape[0]
             
             for j in range(num_cycles):
-                # Only use valid cycles where summary QD > 0
                 if j >= len(QD) or QD[j] < 0.01:
                     continue
                     
@@ -57,18 +51,16 @@ def load_matr_batch(filepath, batch_name):
                     'cell_id': cell_id,
                     'policy': policy_str,
                     'cycle_life': cycle_life,
-                    'cycle': j + 1,  # 1-indexed cycles
+                    'cycle': j + 1,
                     'IR': IR[j],
                     'QC': QC[j],
                     'QD': QD[j],
                     'Tavg': Tavg[j]
                 }
                 
-                # Try to extract Qdlin (interpolated discharge capacity)
                 try:
                     Qdlin_ref = cycles['Qdlin'][j, 0]
                     Qdlin = f[Qdlin_ref][:].flatten()
-                    # We store it as a list of floats
                     row['Qdlin'] = Qdlin.tolist()
                 except Exception:
                     row['Qdlin'] = None
@@ -89,7 +81,6 @@ def main():
     all_rows = []
     for filepath in mat_files:
         filename = os.path.basename(filepath)
-        # Extract batch name, e.g., "2017-05-12"
         batch_name = filename.split('_')[0]
         batch_rows = load_matr_batch(filepath, batch_name)
         all_rows.extend(batch_rows)
@@ -101,11 +92,9 @@ def main():
     df = pd.DataFrame(all_rows)
     print(f"Extracted {len(df)} total cycles across all cells.")
     
-    # Save to parquet
     os.makedirs(PROCESSED_DIR, exist_ok=True)
     out_path = os.path.join(PROCESSED_DIR, "cycles.parquet")
     
-    # Pyarrow can handle list columns natively
     df.to_parquet(out_path, engine='pyarrow', index=False)
     print(f"Saved processed data to {out_path}")
 

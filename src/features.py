@@ -4,12 +4,10 @@ import os
 
 PROCESSED_DIR = r"d:\chandru project\RUL prediction\data\processed"
 WINDOW_SIZE = 10
-STEP_SIZE = 5 # extract a checkpoint every 5 cycles
+STEP_SIZE = 5
 
 def extract_features(df):
     feature_rows = []
-    
-    # Group by cell
     grouped = df.groupby('cell_id')
     
     for cell_id, group in grouped:
@@ -17,8 +15,6 @@ def extract_features(df):
         cycle_life = group['cycle_life'].iloc[0]
         batch = group['batch'].iloc[0]
         
-        # Nominal capacity is the max QD observed in the first 10 cycles
-        # We use this to normalize QD so the model works for any LFP size
         nominal_QD = group['QD'].iloc[:10].max() if len(group) > 10 else group['QD'].max()
         if nominal_QD == 0 or np.isnan(nominal_QD):
             continue
@@ -28,30 +24,24 @@ def extract_features(df):
             past_row = group.iloc[idx - WINDOW_SIZE]
             
             k = current_row['cycle']
-            
-            # Target: Remaining cycles
             rul = cycle_life - k
             if rul < 0:
-                continue # Ignore data past declared cycle life
+                continue
                 
-            # Basic features
             qd_current = current_row['QD']
             qd_past = past_row['QD']
             
-            # Normalized capacity features (Generalization)
             SOH = qd_current / nominal_QD
             capacity_fade = (qd_past - qd_current) / nominal_QD
             
             ir_current = current_row['IR']
             tavg_current = current_row['Tavg']
             
-            # Physics-informed Delta Q(V) features
             q_var = np.nan
             q_min = np.nan
             q_mean = np.nan
             
             try:
-                # Qdlin is stored as a list of floats
                 qdlin_curr = current_row['Qdlin']
                 qdlin_past = past_row['Qdlin']
                 
@@ -62,7 +52,6 @@ def extract_features(df):
                     if len(qdlin_curr) > 0 and len(qdlin_curr) == len(qdlin_past):
                         delta_q = qdlin_curr - qdlin_past
                         
-                        # Log-variance of delta Q (Classic early-prediction feature)
                         var_val = np.var(delta_q)
                         q_var = np.log10(np.abs(var_val)) if var_val > 1e-10 else -10
                         
@@ -93,10 +82,8 @@ def main():
     print(f"Loading {in_path}...")
     df = pd.read_parquet(in_path)
     
-    print("Extracting dynamic features (this may take a minute)...")
+    print("Extracting dynamic features...")
     feat_df = extract_features(df)
-    
-    # Drop rows with NaN in critical physics features
     feat_df = feat_df.dropna(subset=['dQ_log_var'])
     
     out_path = os.path.join(PROCESSED_DIR, "features.parquet")

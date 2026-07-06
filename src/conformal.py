@@ -19,10 +19,8 @@ def main():
     features = ['cycle', 'SOH', 'capacity_fade_window', 'IR', 'Tavg', 'dQ_log_var', 'dQ_min', 'dQ_mean']
     target = 'RUL'
     
-    # Drop any NaNs
     df = df.dropna(subset=features + [target])
     
-    # Use the same split as training
     from sklearn.model_selection import GroupShuffleSplit
     gss = GroupShuffleSplit(n_splits=1, test_size=0.2, random_state=42)
     train_idx, test_idx = next(gss.split(df, groups=df['cell_id']))
@@ -33,13 +31,9 @@ def main():
     X_cal = train_df[features]
     y_cal = train_df[target]
     
-    # Compute residuals on calibration set
-    # Note: For a true split-conformal approach, we would hold out a dedicated calibration set.
-    # To maximize data in this POC, we calibrate on the train set residuals (approximate conformal).
     cal_preds = model.predict(X_cal)
     residuals = np.abs(y_cal - cal_preds)
     
-    # 90% confidence interval
     alpha = 0.10
     n = len(residuals)
     q_level = np.ceil((n + 1) * (1 - alpha)) / n
@@ -48,15 +42,13 @@ def main():
     q_hat = np.quantile(residuals, q_level)
     print(f"Calibrated 90% Uncertainty Bound: ±{q_hat:.2f} cycles")
     
-    # Evaluate coverage on test set
     X_test = test_df[features]
     y_test = test_df[target]
     
     test_preds = model.predict(X_test)
-    lower_bound = np.maximum(0, test_preds - q_hat) # RUL cannot be < 0
+    lower_bound = np.maximum(0, test_preds - q_hat)
     upper_bound = test_preds + q_hat
     
-    # Coverage probability
     coverage = np.mean((y_test >= lower_bound) & (y_test <= upper_bound))
     print(f"Test Set Empirical Coverage: {coverage*100:.2f}% (Target: { (1-alpha)*100 }%)")
     

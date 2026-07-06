@@ -316,80 +316,168 @@ with tab3:
             st.info("👆 Please upload a CSV file (e.g. `Synthetic_Unseen_High_Temp.csv`) to track its Electrochemical Pole Migration.")
 
     if cell_data_t3 is not None and len(cell_data_t3) > 0:
-        # Calculate simulated Poles and Zeros across cycles
-        # R0 = IR, R1 = IR * 1.2 (polarization growth), C1 = SOH * 300 (capacitance decay)
-        r0 = cell_data_t3['IR'].values
-        r1 = r0 * (1.2 + (1.0 - cell_data_t3['SOH'].values) * 2.0)
-        c1 = np.maximum(10.0, cell_data_t3['SOH'].values * 400.0)
-        tau = r1 * c1
-
-        poles = -1.0 / tau
-        zeros = -(r0 + r1) / (r0 * r1 * c1)
         cycles_t3 = cell_data_t3['cycle'].values
         soh_t3 = cell_data_t3['SOH'].values
+        r0 = cell_data_t3['IR'].values
 
-        # Interactive slider for current cycle checkpoint
+        # Check if we should append Post-80% EOL Degradation Cliff Forecast (since lab datasets terminate around 80% SOH!)
+        simulate_eol = st.checkbox("🚀 Simulate Post-80% EOL Degradation Cliff (Forecast to Imaginary Axis Strike)", value=True, key="ctrl_eol", help="Laboratory datasets terminate testing around 80% SOH. This extends the trajectory to forecast post-EOL complex pole migration into the imaginary axis!")
+
+        if simulate_eol and soh_t3.min() > 0.68:
+            last_cyc = cycles_t3[-1]
+            last_soh = soh_t3[-1]
+            last_ir = r0[-1]
+
+            # Append 150 forecast cycles where SOH drops non-linearly from last_soh down to 0.68
+            ext_cycles = np.linspace(last_cyc + 5, last_cyc + 150, 30)
+            ext_soh = last_soh - ((ext_cycles - last_cyc) / 150.0)**1.3 * (last_soh - 0.68)
+            ext_ir = last_ir * (1.0 + ((ext_cycles - last_cyc) / 150.0)**1.2 * 0.5)
+
+            cycles_t3 = np.concatenate([cycles_t3, ext_cycles])
+            soh_t3 = np.concatenate([soh_t3, ext_soh])
+            r0 = np.concatenate([r0, ext_ir])
+
+        # Select Control System Model Order
+        model_order = st.radio("Select Control System Model Order:", [
+            "2nd-Order Complex Root Locus (Imaginary Axis Strike ⚡)", 
+            "1st-Order Linear ECM (Real Poles Only)"
+        ], horizontal=True, key="ctrl_order")
+
         max_cyc_t3 = int(cycles_t3.max())
-        sim_cyc_t3 = st.slider("Select Checkpoint Cycle for Pole-Zero Inspection:", min_value=int(cycles_t3.min()), max_value=max_cyc_t3, step=5, key="ctrl_slider")
-
+        sim_cyc_t3 = st.slider("Select Checkpoint Cycle for Live Pole Inspection:", min_value=int(cycles_t3.min()), max_value=max_cyc_t3, step=5, key="ctrl_slider")
         idx_t3 = np.abs(cycles_t3 - sim_cyc_t3).argmin()
-        curr_pole = poles[idx_t3]
-        curr_zero = zeros[idx_t3]
-        curr_tau = tau[idx_t3]
 
-        c_c1, c_c2, c_c3, c_c4 = st.columns(4)
-        c_c1.metric("Current Cycle", f"{cycles_t3[idx_t3]}")
-        c_c2.metric("System Pole (sp)", f"{curr_pole:.4f} rad/s")
-        c_c3.metric("System Zero (sz)", f"{curr_zero:.4f} rad/s")
-        c_c4.metric("Time Constant (τ)", f"{curr_tau:.2f} s")
+        if "1st-Order" in model_order:
+            r1 = r0 * (1.2 + (1.0 - soh_t3) * 2.0)
+            c1 = np.maximum(10.0, soh_t3 * 400.0)
+            tau = r1 * c1
+            poles = -1.0 / tau
+            zeros = -(r0 + r1) / (r0 * r1 * c1)
 
-        # Dynamic Live Transfer Function Display
-        curr_r0 = r0[idx_t3]
-        curr_r1 = r1[idx_t3]
-        st.markdown("#### 📐 Live Numerical Laplace Transfer Function at this Cycle:")
-        st.latex(r"H(s) = " + f"{curr_r0:.4f} + \\frac{{{curr_r1:.4f}}}{{1 + {curr_tau:.2f} s}} = {curr_r0:.4f} \\cdot \\frac{{s - ({curr_zero:.4f})}}{{s - ({curr_pole:.4f})}}")
+            curr_pole = poles[idx_t3]
+            curr_zero = zeros[idx_t3]
+            curr_tau = tau[idx_t3]
 
-        # Plot Pole Migration in Complex s-plane
-        fig_pz = go.Figure()
+            c_c1, c_c2, c_c3, c_c4 = st.columns(4)
+            c_c1.metric("Current Cycle", f"{cycles_t3[idx_t3]}")
+            c_c2.metric("System Pole (sp)", f"{curr_pole:.4f} rad/s")
+            c_c3.metric("System Zero (sz)", f"{curr_zero:.4f} rad/s")
+            c_c4.metric("Time Constant (τ)", f"{curr_tau:.2f} s")
 
-        # Full trajectory trail
-        fig_pz.add_trace(go.Scatter(
-            x=poles,
-            y=np.zeros_like(poles),
-            mode='lines+markers',
-            name='Pole Migration Path (Lifecycle)',
-            marker=dict(size=6, color=cycles_t3, colorscale='Viridis', showscale=True, colorbar=dict(title="Cycle")),
-            line=dict(color='gray', dash='dot')
-        ))
+            st.markdown("#### 📐 Live Numerical Laplace Transfer Function at this Cycle:")
+            st.latex(r"H(s) = " + f"{r0[idx_t3]:.4f} + \\frac{{{r1[idx_t3]:.4f}}}{{1 + {curr_tau:.2f} s}} = {r0[idx_t3]:.4f} \\cdot \\frac{{s - ({curr_zero:.4f})}}{{s - ({curr_pole:.4f})}}")
 
-        # Current checkpoint marker
-        fig_pz.add_trace(go.Scatter(
-            x=[curr_pole],
-            y=[0],
-            mode='markers',
-            name=f'Current Pole (Cycle {cycles_t3[idx_t3]})',
-            marker=dict(size=16, color='red', symbol='x')
-        ))
+            fig_pz = go.Figure()
+            fig_pz.add_trace(go.Scatter(
+                x=poles, y=np.zeros_like(poles),
+                mode='lines+markers', name='Pole Migration Path (Lifecycle)',
+                marker=dict(size=6, color=cycles_t3, colorscale='Viridis', showscale=True, colorbar=dict(title="Cycle")),
+                line=dict(color='gray', dash='dot')
+            ))
+            fig_pz.add_trace(go.Scatter(
+                x=[curr_pole], y=[0], mode='markers', name=f'Current Pole (Cycle {cycles_t3[idx_t3]})',
+                marker=dict(size=16, color='red', symbol='x')
+            ))
+            fig_pz.add_trace(go.Scatter(
+                x=[curr_zero], y=[0], mode='markers', name=f'Current Zero (Cycle {cycles_t3[idx_t3]})',
+                marker=dict(size=14, color='blue', symbol='circle-open', line=dict(width=3))
+            ))
+            fig_pz.update_layout(
+                title=f"1st-Order s-Plane Pole-Zero Migration Map ({cell_label_t3})",
+                xaxis_title="Real Axis σ (rad/s) [Stability Degradation Trajectory -->]",
+                yaxis_title="Imaginary Axis jω",
+                yaxis=dict(range=[-0.5, 0.5]),
+                legend=dict(orientation="h", yanchor="bottom", y=1.05, xanchor="right", x=1),
+                margin=dict(t=80), template="plotly_white"
+            )
+            st.plotly_chart(fig_pz, use_container_width=True)
 
-        # Zero position marker
-        fig_pz.add_trace(go.Scatter(
-            x=[curr_zero],
-            y=[0],
-            mode='markers',
-            name=f'Current Zero (Cycle {cycles_t3[idx_t3]})',
-            marker=dict(size=14, color='blue', symbol='circle-open', line=dict(width=3))
-        ))
+        else:
+            zeta_all = np.where(soh_t3 >= 0.80, 
+                                1.00 + 0.35 * ((soh_t3 - 0.80) / 0.20),
+                                1.00 - 1.00 * ((0.80 - soh_t3) / 0.10))
+            zeta_all = np.clip(zeta_all, 0.0, 1.5)
+            omega_n = 0.5
 
-        fig_pz.update_layout(
-            title=f"Complex s-Plane Pole-Zero Migration Map ({cell_label_t3})",
-            xaxis_title="Real Axis σ (rad/s) [Stability Degradation Trajectory ➔]",
-            yaxis_title="Imaginary Axis jω",
-            yaxis=dict(range=[-0.5, 0.5]),
-            legend=dict(orientation="h", yanchor="bottom", y=1.05, xanchor="right", x=1),
-            margin=dict(t=80),
-            template="plotly_white"
-        )
+            curr_zeta = zeta_all[idx_t3]
 
-        st.plotly_chart(fig_pz, use_container_width=True)
+            poles_p1 = []
+            poles_p2 = []
+            for z in zeta_all:
+                coeff = [1.0, 2.0 * z * omega_n, omega_n**2]
+                rts = sorted(np.roots(coeff), key=lambda r: (r.imag, r.real), reverse=True)
+                poles_p1.append(rts[0])
+                poles_p2.append(rts[1])
+            poles_p1 = np.array(poles_p1)
+            poles_p2 = np.array(poles_p2)
+
+            cp1 = poles_p1[idx_t3]
+            cp2 = poles_p2[idx_t3]
+
+            c_c1, c_c2, c_c3, c_c4 = st.columns(4)
+            c_c1.metric("Current Cycle", f"{cycles_t3[idx_t3]}")
+            c_c2.metric("Damping Ratio (ζ)", f"{curr_zeta:.3f}")
+            c_c3.metric("Natural Freq (ωn)", f"{omega_n:.2f} rad/s")
+            if curr_zeta > 1.0:
+                c_c4.metric("System State", "🟢 OVERDAMPED (Real)")
+            elif curr_zeta > 0.05:
+                c_c4.metric("System State", "🟣 UNDERDAMPED (Complex)")
+            else:
+                c_c4.metric("System State", "🚨 UNSTABLE (Imaginary Strike)")
+
+            if curr_zeta > 1.0:
+                status_box = f"🟢 **OVERDAMPED REGIME ($\\zeta = {curr_zeta:.2f} > 1.0$)** — Battery is healthy. Both poles sit on the negative real axis ($\\text{{Im}}(s) = 0$). Degradation is linear."
+            elif curr_zeta > 0.95:
+                status_box = f"🟠 **BIFURCATION POINT ($\\zeta \\approx 1.00$)** — Critical damping reached! The two real poles collide on the real axis and are **splitting off into the complex plane ($\\pm j\\omega$)**. This marks the onset of electrochemical imbalance!"
+            elif curr_zeta > 0.05:
+                status_box = f"🟣 **UNDERDAMPED REGIME ($\\zeta = {curr_zeta:.2f} < 1.0$)** — Poles have migrated into the complex plane ($s = {cp1.real:.3f} \\pm j{abs(cp1.imag):.3f}$). Oscillatory ion transport lag detected!"
+            else:
+                status_box = f"🚨 **EMERGENCY: IMAGINARY AXIS STRIKE ($\\zeta = 0.00$)** — The poles have struck the Imaginary Axis ($\\text{{Re}}(s) = 0, s = \\pm j{abs(cp1.imag):.2f}$). Mathematically proves catastrophic electrochemical instability and impending cell failure!"
+
+            st.markdown(f"### Current Stability Status:\n{status_box}")
+
+            st.markdown("#### 📐 Live Numerical 2nd-Order Laplace Transfer Function:")
+            st.latex(r"G(s) = \frac{\omega_n^2}{s^2 + 2\zeta\omega_n s + \omega_n^2} = \frac{" + f"{omega_n**2:.4f}" + r"}{s^2 + " + f"{2*curr_zeta*omega_n:.4f} s + {omega_n**2:.4f}" + r"} = \frac{" + f"{omega_n**2:.4f}" + r"}{(s - (" + f"{cp1.real:.3f}+{cp1.imag:.3f}j" + r"))(s - (" + f"{cp2.real:.3f}{cp2.imag:+.3f}j" + r"))}")
+
+            fig_pz = go.Figure()
+
+            # Add Instability Boundary (Imaginary Axis)
+            fig_pz.add_trace(go.Scatter(
+                x=[0, 0], y=[-0.65, 0.65],
+                mode='lines', name='Instability Boundary (Imaginary Axis Re(s)=0)',
+                line=dict(color='red', width=3, dash='dash')
+            ))
+
+            # Trajectory up to current point
+            fig_pz.add_trace(go.Scatter(
+                x=poles_p1[:idx_t3+1].real, y=poles_p1[:idx_t3+1].imag,
+                mode='lines+markers', name='Upper Pole Path (p1)',
+                marker=dict(size=6, color=cycles_t3[:idx_t3+1], colorscale='Viridis', showscale=True, colorbar=dict(title="Cycle")),
+                line=dict(color='purple', dash='dot')
+            ))
+            fig_pz.add_trace(go.Scatter(
+                x=poles_p2[:idx_t3+1].real, y=poles_p2[:idx_t3+1].imag,
+                mode='lines+markers', name='Lower Pole Path (p2)',
+                marker=dict(size=6, color=cycles_t3[:idx_t3+1], colorscale='Viridis', showscale=False),
+                line=dict(color='purple', dash='dot')
+            ))
+
+            # Current checkpoint markers
+            fig_pz.add_trace(go.Scatter(
+                x=[cp1.real, cp2.real], y=[cp1.imag, cp2.imag],
+                mode='markers', name=f'Live Poles at Cycle {cycles_t3[idx_t3]}',
+                marker=dict(size=18, color='red', symbol='x', line=dict(width=2))
+            ))
+
+            fig_pz.update_layout(
+                title=f"Live 2nd-Order Complex Root Locus & Imaginary Axis Strike ({cell_label_t3})",
+                xaxis_title="Real Axis σ (rad/s) [Stability Degradation Trajectory -->]",
+                yaxis_title="Imaginary Axis jω (rad/s) [Oscillatory Frequency]",
+                xaxis=dict(range=[-0.8, 0.15]),
+                yaxis=dict(range=[-0.65, 0.65]),
+                legend=dict(orientation="h", yanchor="bottom", y=1.05, xanchor="right", x=1),
+                margin=dict(t=80), template="plotly_white"
+            )
+            st.plotly_chart(fig_pz, use_container_width=True)
 
 

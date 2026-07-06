@@ -44,7 +44,6 @@ def generate_static_plots():
     r2 = r2_score(y_test, preds)
     print(f"Generating plots... Test MAE: {mae:.2f}, R2: {r2:.4f}")
     
-    # --- PLOT 1: True vs Predicted RUL ---
     plt.figure(figsize=(8, 6))
     plt.scatter(y_test, preds, alpha=0.3, color='blue', edgecolors='none', s=15)
     max_val = max(y_test.max(), preds.max())
@@ -57,7 +56,6 @@ def generate_static_plots():
     plt.savefig(os.path.join(RESULTS_DIR, "01_true_vs_predicted_rul.png"), dpi=300, bbox_inches='tight')
     plt.close()
     
-    # --- PLOT 2: Feature Importance ---
     importances = model.feature_importances_
     indices = np.argsort(importances)
     sorted_features = [features[i] for i in indices]
@@ -72,7 +70,6 @@ def generate_static_plots():
     plt.savefig(os.path.join(RESULTS_DIR, "02_feature_importance.png"), dpi=300, bbox_inches='tight')
     plt.close()
     
-    # --- PLOT 3: Error Residuals Histogram ---
     residuals = y_test - preds
     plt.figure(figsize=(8, 6))
     plt.hist(residuals, bins=30, color='purple', alpha=0.7, edgecolor='black')
@@ -84,11 +81,9 @@ def generate_static_plots():
     plt.savefig(os.path.join(RESULTS_DIR, "03_prediction_errors_histogram.png"), dpi=300, bbox_inches='tight')
     plt.close()
     
-    # --- PLOT 4: Capacity Fade Curves (SOH vs Cycle) ---
     plt.figure(figsize=(10, 6))
     cells = test_df['cell_id'].unique()
     
-    # Determine min and max cycle life for color mapping
     min_life = test_df['cycle_life'].min()
     max_life = test_df['cycle_life'].max()
     norm = plt.Normalize(min_life, max_life)
@@ -112,8 +107,6 @@ def generate_static_plots():
     plt.savefig(os.path.join(RESULTS_DIR, "04_capacity_fade_curves.png"), dpi=300, bbox_inches='tight')
     plt.close()
     
-    # --- PLOT 5: Dynamic Trajectory of a Single Cell ---
-    # Pick a random cell that lasted a decent amount of time (e.g. > 800 cycles)
     long_cells = test_df[test_df['cycle_life'] > 800]['cell_id'].unique()
     if len(long_cells) > 0:
         sample_cell = long_cells[0]
@@ -123,7 +116,6 @@ def generate_static_plots():
         plt.plot(cell_data['cycle'], cell_data['RUL'], 'k--', label='True RUL', lw=2)
         plt.plot(cell_data['cycle'], cell_data['Predicted_RUL'], 'b-', label='Predicted RUL', marker='o', markersize=4)
         
-        # Add Conformal Uncertainty Bounds (assuming ~122 cycles based on 90% calibration)
         q_hat = 122.0
         plt.fill_between(cell_data['cycle'], 
                          np.maximum(0, cell_data['Predicted_RUL'] - q_hat), 
